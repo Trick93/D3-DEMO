@@ -1,0 +1,143 @@
+<!DOCTYPE>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>force图</title>
+	<style type="text/css">
+		.node circle{
+			cursor: pointer;
+			stroke: #3182bd;
+			stroke-width: 1.5px;
+		}
+		.node text{
+			font: 10px sans-serif;
+			pointer-events: none;
+			text-anchor: middle;
+		}
+		line.link{
+			fill: none;
+			stroke: #9ecae1;
+			stroke-width: 1.5px;
+		}
+	</style>
+</head>
+<body>
+	<script type="text/javascript" src="d3.v3.min.js"></script>
+	<script>
+		var width = 960,
+			height = 500,
+			root;
+
+		var force = d3.layout.force()
+			.linkDistance(80)//设置链接距离
+			.charge(-120)//设置电荷强度
+			.gravity(.05)//设置重力强度
+			.size([width,height])//设置布局大小
+			.on("tick",tick);//监听在计算布局位置时的更新
+
+		var svg = d3.select("body").append("svg")
+			.attr("width",width)
+			.attr("height",height);
+
+		var link = svg.selectAll(".link"),
+			node = svg.selectAll(".node");
+
+		d3.json("graph.json",function(error,json){
+			if(error) throw error;
+
+			function collapse(d){
+				if(d.children){
+					d._children = d.children;
+					d._children.forEach(collapse);
+					d.children = null;
+				}
+			}
+
+			root = json;
+			//root.children.forEach(collapse);
+			update();
+		});
+
+		function update(){
+			console.log(root);
+			var nodes = flatten(root),
+				links = d3.layout.tree().links(nodes);
+			//console.log(nodes);
+			//重启力向布局
+			force.nodes(nodes)
+				.links(links)
+				.start();
+
+			//更新links
+			link = link.data(links,function(d) {return d.target.id;});
+
+			link.exit().remove();
+
+			link.enter().insert("line",".node")
+				.attr("class","link");
+
+			//更新节点
+			node = node.data(nodes,function(d) {return d.id;});
+
+			node.exit().remove();
+
+			var nodeEnter = node.enter().append("g")
+				.attr("class","node")
+				.on("click",click)
+				.call(force.drag);
+
+			nodeEnter.append("circle")
+				.attr("r",function(d) {return Math.sqrt(d.size) / 10 || 4.5;});
+
+			nodeEnter.append("text")
+				.attr("dy",".35em")
+				.text(function(d) {return d.name;});
+
+			node.select("circle")
+				.style("fill",color);
+		}
+
+		function tick(){
+			link.attr("x1",function(d) {return d.source.x;})
+				.attr("y1",function(d) {return d.source.y;})
+				.attr("x2",function(d) {return d.target.x;})
+				.attr("y2",function(d) {return d.target.y;});
+
+			node.attr("transform",function(d) {return "translate(" + d.x + "," + d.y + ")";});
+		}
+
+		function color(d){
+			return d._children? "#3182bd" //collapsed package
+			: d.children? "#c6dbef" //expanded package
+			: "#fd8d3c";
+		}
+
+		//点击元素
+		function click(d){
+			if(d3.event.defaultPrevented) return;//忽略拖拽的事件
+			if(d.children){
+				d._children = d.children;
+				d.children = null;
+			}else{
+				d.children = d._children;
+				d._children = null;
+			}
+			update();
+		}
+
+		//返回所有节点列
+		function flatten(root){
+			var nodes = [], i=0;
+
+			function recurse(node){
+				if(node.children) node.children.forEach(recurse);
+				if(!node.id) node.id = ++i;
+				nodes.push(node);
+			}
+
+			recurse(root);
+			return nodes;
+		}
+	</script>
+</body>
+</html>
